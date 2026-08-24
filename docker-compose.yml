@@ -1,0 +1,62 @@
+# Self-hosted / Enterprise edition.
+#
+#   cp .env.example .env      # set JWT_SECRET at minimum
+#   docker compose up -d
+#
+# Defaults to Postgres because a self-hosted deployment is usually the one that
+# wants backups, replication and more than one app instance. Drop the `db`
+# service and unset DATABASE_URL to run on SQLite instead.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: apex_atlas
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apex -d apex_atlas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      # Required. The server refuses to boot in production without it.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — at least 32 random characters}
+      DATABASE_URL: postgres://apex:${POSTGRES_PASSWORD}@db:5432/apex_atlas
+      # Self-hosted is single-tenant by default: one organisation, everyone
+      # joins it. Set true only if you are reselling to separate customers.
+      MULTI_TENANT: ${MULTI_TENANT:-false}
+      DEFAULT_TENANT_NAME: ${DEFAULT_TENANT_NAME:-My Organisation}
+      DEFAULT_TENANT_PLAN: ${DEFAULT_TENANT_PLAN:-enterprise}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      MARKET_BEHAVIOUR: ${MARKET_BEHAVIOUR:-}
+      # Closed beta: invite-gated registration with a hard population cap.
+      INVITE_ONLY: ${INVITE_ONLY:-}
+      BETA_MAX_TENANTS: ${BETA_MAX_TENANTS:-}
+      AI_INPUT_CENTS_PER_MTOK: ${AI_INPUT_CENTS_PER_MTOK:-}
+      AI_OUTPUT_CENTS_PER_MTOK: ${AI_OUTPUT_CENTS_PER_MTOK:-}
+      # Unset means the admin routes are not mounted at all.
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      ADMIN_IP_ALLOWLIST: ${ADMIN_IP_ALLOWLIST:-}
+      RISK_MAX_ORDER_NOTIONAL: ${RISK_MAX_ORDER_NOTIONAL:-}
+      RISK_START_HALTED: ${RISK_START_HALTED:-}
+    volumes:
+      - app-data:/data
+
+volumes:
+  db-data:
+  app-data:

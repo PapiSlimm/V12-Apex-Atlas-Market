@@ -1,0 +1,8 @@
+{
+  "name": "V12 Apex Atlas: Macaron-v1 Agentic OS",
+  "description": "Agentic operations workspace for multimedia production: a markdown digital twin of your production and logistics network, a Hermes zero-loss inventory-settlement engine with a hash-chained decision audit, and a sandboxed generative-UI harness.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

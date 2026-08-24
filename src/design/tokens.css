@@ -1,0 +1,179 @@
+/*
+ * V12 Apex Atlas — design tokens.
+ *
+ * One place where a colour, a radius or a duration is decided. Components read
+ * roles (`--surface-2`, `--status-critical-ink`), never hexes, so the
+ * high-contrast theme is a value swap rather than a second set of components.
+ *
+ * WHY TOKENS AND NOT TAILWIND UTILITIES DIRECTLY
+ * ----------------------------------------------
+ * Every panel in this app was `bg-zinc-900/90 border border-zinc-800 rounded-xl
+ * p-4 shadow-xl`, hand-written in twenty places and subtly different in about
+ * six of them. That is not a style preference — it is why the high-contrast
+ * theme did nothing except toggle a class nobody read, and why three screens
+ * disagreed about what "warning amber" was.
+ *
+ * COLOUR PROVENANCE
+ * -----------------
+ * The categorical series and the status palette are not chosen by eye. They are
+ * the validated palette from the data-visualisation guidance, re-checked
+ * against THIS app's surfaces rather than the reference ones:
+ *
+ *   node scripts/validate_palette.js "#3987e5,#d95926,#199e70,#c98500" \
+ *     --mode dark --surface "#09090b"
+ *   -> lightness band PASS · chroma floor PASS · CVD separation PASS
+ *      (worst adjacent ΔE 8.4 protan) · normal-vision PASS (19.8) · contrast PASS
+ *
+ * Status hues are fixed and never themed, so a status colour can never be
+ * mistaken for a series colour. Each ships with an icon and a label — colour
+ * alone never carries meaning.
+ *
+ * The `-ink` steps exist because the mark colour and the text colour have
+ * different jobs. `--status-critical` at #d03b3b measures 3.69:1 on the panel
+ * surface: fine for a 2px border or an icon, short of AA for body text. The ink
+ * step clears 4.5:1. Contrast measured, not assumed.
+ */
+
+:root {
+  /* ---------------------------------------------------------- surfaces */
+  --surface-0: #09090b; /* app background */
+  --surface-1: #18181b; /* panel */
+  --surface-2: #101012; /* inset / well inside a panel */
+  --surface-3: #232327; /* raised: menus, tooltips */
+  --surface-glass: rgb(24 24 27 / 0.9);
+
+  /* ------------------------------------------------------------- ink */
+  --ink-primary: #fafafa;
+  --ink-secondary: #a1a1aa;
+  --ink-muted: #71717a;
+  --ink-inverse: #09090b;
+
+  /* ----------------------------------------------------------- lines */
+  --line-subtle: #232327;
+  --line: #2f2f35;
+  --line-strong: #52525b;
+
+  /* -------------------------------------------- brand / interactive */
+  --accent: #34d399;
+  --accent-ink: #6ee7b7;
+  --accent-contrast: #052e21;
+  --focus-ring: #7dd3fc;
+
+  /* --------------------------------------------------------- status
+     Fixed. Never themed. Never reused as a series colour. */
+  --status-good: #0ca30c;
+  --status-good-ink: #22c55e;
+  --status-warning: #fab219;
+  --status-warning-ink: #fab219;
+  --status-serious: #ec835a;
+  --status-serious-ink: #f4a582;
+  --status-critical: #d03b3b;
+  --status-critical-ink: #ef6b6b;
+
+  /* ------------------------------------- categorical series (validated)
+     Assigned in fixed order, never cycled. A ninth series folds into
+     "Other" or becomes a small multiple — it is never a generated hue. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+
+  /* --------------------------------------- sequential ramp (one hue)
+     Magnitude only. Meter tracks take a light step of the SAME hue as the
+     fill, so state reads across the whole bar rather than fill-versus-grey. */
+  --seq-100: #cde2fb;
+  --seq-250: #86b6ef;
+  --seq-400: #3987e5;
+  --seq-550: #1c5cab;
+  --seq-700: #0d366b;
+
+  /* ---------------------------------------------------------- radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-pill: 9999px;
+
+  /* ------------------------------------------------------ elevation */
+  --elevation-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --elevation-2: 0 4px 12px rgb(0 0 0 / 0.45);
+  --elevation-3: 0 12px 32px rgb(0 0 0 / 0.55);
+
+  /* --------------------------------------------------------- motion */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * High contrast.
+ *
+ * Previously this theme added a class and changed nothing, because no component
+ * read it. Now it is a token override: surfaces go to true black, lines and ink
+ * step up, and translucency is removed — a glass panel over a busy background is
+ * exactly what a low-vision user does not need.
+ */
+:root[data-theme='high-contrast'] {
+  --surface-0: #000000;
+  --surface-1: #0a0a0a;
+  --surface-2: #000000;
+  --surface-3: #16161a;
+  --surface-glass: #0a0a0a;
+
+  --ink-primary: #ffffff;
+  --ink-secondary: #d4d4d8;
+  --ink-muted: #a1a1aa;
+
+  --line-subtle: #3f3f46;
+  --line: #52525b;
+  --line-strong: #a1a1aa;
+
+  --accent: #4ade80;
+  --accent-ink: #86efac;
+
+  --status-good-ink: #4ade80;
+  --status-warning-ink: #fbbf24;
+  --status-serious-ink: #f4a582;
+  --status-critical-ink: #f28b8b;
+}
+
+/*
+ * Motion. Respected globally rather than per-component, because a component
+ * that forgets is a component that ignores the user's operating system.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Focus.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click does not paint a ring
+ * but a Tab key always does. Set once here because the single most common way a
+ * component library loses keyboard accessibility is each component reinventing
+ * this and one of them forgetting.
+ */
+:where(a, button, [role='button'], [role='option'], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Values in columns must align; standalone display numbers must not be loose. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#09090b" />
+    <!--
+      The application is authenticated and must not be indexed. SEO belongs to a
+      separate marketing site; indexing an app host leaks tenant subdomains and
+      staging environments into search results.
+    -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta
+      name="description"
+      content="V12 Apex Atlas — an agentic operations workspace that grounds AI agents in a digital twin of your production and logistics network, with an auditable zero-loss asset ledger and a sandboxed generative-UI harness."
+    />
+    <title>V12 Apex Atlas — Agentic Operations Workspace</title>
+    <!-- Generated from the supplied master by scripts/build-logo.py. The app
+         surface is baked in rather than left transparent: a dark-chrome mark on
+         a dark browser tab is an empty square. -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Social preview. The app host is noindex, but a link pasted into a chat
+         still unfurls, and an unfurl with no image looks broken. -->
+    <meta property="og:title" content="V12 Apex Atlas — Urban Visions Enterprises" />
+    <meta
+      property="og:description"
+      content="An agentic operations workspace for multimedia production. Closed beta, by invite."
+    />
+    <meta property="og:image" content="/media/og-card.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="font-family: system-ui, sans-serif; padding: 3rem 2rem; color: #e4e4e7; background: #09090b; text-align: center">
+        <img src="/media/logo-reverse-256.png" alt="Urban Visions Enterprises — V12 Multimedia" width="180" />
+        <p style="margin-top: 1.5rem">V12 Apex Atlas requires JavaScript to run.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

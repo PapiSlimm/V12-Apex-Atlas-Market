@@ -1,0 +1,10 @@
+# V12 Apex Atlas is an authenticated operations product, not a public website.
+# There is nothing here for a crawler: every meaningful surface is behind a
+# login, and the few unauthenticated endpoints serve a demo tenant.
+#
+# Marketing pages belong on a separate marketing host with its own robots.txt.
+# Indexing an application host is how staging environments, customer subdomains
+# and password-reset URLs end up in search results.
+
+User-agent: *
+Disallow: /

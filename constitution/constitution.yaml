@@ -1,0 +1,99 @@
+# THE V12 ECOSYSTEM CONSTITUTION — canonical machine-readable form.
+# Instrument V12-CONST-001. Loaded at process start, verified against
+# constitution.lock (SHA-256), consulted before every consequential action.
+# Enforcement is deterministic and non-delegable (Article I §1.4). A model may
+# propose; only the engine disposes.
+instrument: V12-CONST-001
+version: 1.1.0
+
+# Articles that may be tightened but never weakened, narrowed or repealed (§12.4).
+entrenched_articles: [I, II, III, VII, X, XII, XIII]
+
+# Article XI — the sanctions ladder. Applied automatically by the engine.
+sanctions_ladder:
+  advisory:     { sanction: WARN,              action_proceeds: true,  effect: "Recorded; action proceeds; counts toward escalation." }
+  moderate:     { sanction: THROTTLE,          action_proceeds: false, effect: "Agent rate-limited to 10% for 60 minutes; action denied." }
+  serious:      { sanction: SUSPEND_AGENT,     action_proceeds: false, effect: "Agent suspended pending human review; in-flight work voided." }
+  critical:     { sanction: QUARANTINE_TENANT, action_proceeds: false, effect: "Tenant pipeline frozen, data quarantined, ecosystem alert raised." }
+  catastrophic: { sanction: HALT_ECOSYSTEM,    action_proceeds: false, effect: "All agent execution stops across all applications. Human restart only." }
+
+# §11.2 accumulation: N same-severity violations within the window escalate one rung.
+accumulation:
+  window_hours: 24
+  threshold: 3
+
+# Schedule A — prohibited content/data classes. `detectable` classes carry
+# deterministic detectors in code (schedules.ts); all are quarantined, never dropped.
+prohibited_classes:
+  - { id: A1,  severity: catastrophic, detectable: true,  label: "CSAM / sexualisation of minors — zero tolerance" }
+  - { id: A2,  severity: critical,     detectable: true,  label: "Stolen credentials & authentication secrets" }
+  - { id: A3,  severity: critical,     detectable: true,  label: "Unlawfully obtained personal data" }
+  - { id: A4,  severity: critical,     detectable: true,  label: "Payment instrument data outside PCI scope" }
+  - { id: A5,  severity: critical,     detectable: true,  label: "Malware, exploit payloads, intrusion tooling" }
+  - { id: A6,  severity: serious,      detectable: false, label: "Sanctions & export-control violations" }
+  - { id: A7,  severity: serious,      detectable: false, label: "Counterfeit goods & infringing media" }
+  - { id: A8,  severity: serious,      detectable: true,  label: "Fraudulent commerce (fake reviews, deceptive pricing)" }
+  - { id: A9,  severity: serious,      detectable: false, label: "Market manipulation & insider information" }
+  - { id: A10, severity: critical,     detectable: true,  label: "Prompt injection & instruction smuggling" }
+  - { id: A11, severity: serious,      detectable: false, label: "Content unlawful in the relevant jurisdiction" }
+  - { id: A12, severity: serious,      detectable: false, label: "Deceptive synthetic media of real persons" }
+
+# §13.3 — the exhaustive list of what constitutes a release subject to Article XIII.
+release_triggers:
+  - public_feed_publication      # Sociofy / SonicStream / CEOS
+  - campaign_or_price_change
+  - atlas_galaxy_transit
+  - cross_application_feed_share
+  - firewall_or_security_change
+  - agent_capability_change
+  - production_deployment
+  - constitutional_amendment
+  - rmpm_public_assertion
+
+# Article XIII — Superior Inspectorate General.
+inspectorate:
+  min_seats: 3
+  ordinary_rule: simple_majority
+  entrenched_or_critical_rule: unanimity
+  review_window_hours: 24        # §13.8 expiry is refusal
+  certificate_validity_minutes: 60  # single-use
+  silence_is_refusal: true
+  self_certification: catastrophic
+
+# City World per-destination feed-share review (§13.12).
+feed_share_destinations: [Sociofy, "Orion Prime", Nexion, ApexAtlas, CEOS, SonicStream, "V12 Multimedia"]
+
+# Article III / IV — determinism of money & authorisation of expenditure.
+money:
+  models_never_compute: true
+  float_forbidden: true
+  double_entry_required: true
+  ledger_append_only: true
+  hash_chain_required: true
+  margin_floor_absolute: true
+  spend_requires_receipt: true
+  self_authorisation: serious
+  receipt_single_use: true
+
+# Schedule C — time limits (seconds unless noted).
+time_limits:
+  sentinel_hardening_days: 7
+  sentinel_hardening_breach_days: 9
+  prohibited_alert_seconds: 60
+  ruleset_ack_seconds: 900
+  auth_receipt_seconds: 900
+  access_token_seconds: 3600
+  inspectorate_review_hours: 24
+  certificate_validity_minutes: 60
+  feed_share_hours: 4
+  amendment_notice_hours: 72
+  hash_chain_sweep_hours: 24
+  tenant_export_hours: 72
+
+# Infrastructure controls that require deployment substrate to be truly live.
+# The engine enforces the *interface*; production posture must satisfy these.
+infrastructure_requirements:
+  tenant_row_level_security: "PostgreSQL RLS bound to session org claim (Art. II §2.1)"
+  customer_managed_keys: "KMS envelope encryption, unilateral revocation (Art. II §2.3, VI §6.3)"
+  mutual_tls: "TLS 1.3 mutual auth on inter-application transit (Art. VI §6.3, IX §9.1)"
+  ephemeral_ingestion: "Short-lived containerised ingestion in private subnets (Art. VI §6.4)"

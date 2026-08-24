@@ -1,0 +1,25 @@
+{
+  "inspectors": [
+    {
+      "id": "ig-1",
+      "name": "Inspector General I",
+      "kind": "human",
+      "publicKey": "MCowBQYDK2VwAyEAvkx9K4CeSZdn1Jk1ky7UhlGsl8rbWIZqKSKiYx1ygVM=",
+      "seatedAt": 1786812479217
+    },
+    {
+      "id": "ig-2",
+      "name": "Inspector General II",
+      "kind": "human",
+      "publicKey": "MCowBQYDK2VwAyEAff0HtOkU9jEK9VpQjEhC2gJkd6FZC+kNJ8h+ijQ+Ujg=",
+      "seatedAt": 1786812479760
+    },
+    {
+      "id": "ig-3",
+      "name": "Inspector General III",
+      "kind": "human",
+      "publicKey": "MCowBQYDK2VwAyEAoh9X0zwwIClsyc0cMpzKBf6Dx/aYVzLgBhNJu/rjBAU=",
+      "seatedAt": 1786812480279
+    }
+  ]
+}
