@@ -146,6 +146,15 @@ test('the operator can reach the RLS step on a deployed instance', () => {
   const runtimeCopiesDist = /COPY[^\n]*\/app\/dist \.\/dist/.test(runtimeStage);
   assert.ok(runtimeCopiesDist, 'dist is not copied into the runtime image');
 
+  // The RUNNABLE command, not merely a mention of the subject. The first
+  // version of this assertion matched /rls:apply|apply-rls/ and passed happily
+  // when the blueprint had been edited to say "see the docs" — because the
+  // surrounding prose still contained the words. A test that a mutation walks
+  // straight through is not a test.
   const blueprint = read('render.yaml');
-  assert.match(blueprint, /rls:apply|apply-rls/, 'the blueprint does not tell the operator this step exists');
+  assert.match(
+    blueprint,
+    /node dist\/apply-rls\.cjs --connections-are-scoped/,
+    'the blueprint does not give the operator a command that works on the instance',
+  );
 });
