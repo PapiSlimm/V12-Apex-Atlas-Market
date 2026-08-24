@@ -9,7 +9,7 @@
   "scripts": {
     "predev": "npm run build:sandbox",
     "dev": "tsx server.ts",
-    "build": "npm run build:client && npm run build:sandbox && npm run build:server",
+    "build": "npm run build:client && npm run build:sandbox && npm run build:server && npm run build:ops",
     "build:client": "vite build",
     "build:sandbox": "node scripts/build-sandbox.mjs",
     "build:server": "esbuild server.ts --bundle --platform=node --target=node20 --format=cjs --packages=external --outfile=dist/server.cjs",
@@ -29,7 +29,8 @@
     "constitution:verify": "tsx --test tests/constitution.test.ts",
     "key": "tsx scripts/external-key.ts",
     "rls:apply": "tsx scripts/apply-rls.ts",
-    "test:rls": "tsx --test tests/rls.test.ts"
+    "test:rls": "tsx --test tests/rls.test.ts",
+    "build:ops": "esbuild scripts/apply-rls.ts --bundle --platform=node --target=node20 --format=cjs --packages=external --outfile=dist/apply-rls.cjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.8",

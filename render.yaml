@@ -59,7 +59,17 @@ services:
 
       # ONE MANUAL STEP AFTER THE FIRST DEPLOY:
       #
-      #   npm run rls:apply -- --connections-are-scoped
+      #   node dist/apply-rls.cjs --connections-are-scoped
+      #
+      # Run it from the Render Shell on the web service. It is `node` and not
+      # `npm run rls:apply` on purpose: the runtime image carries dist and
+      # production dependencies only — no scripts/ directory and no tsx — so the
+      # npm script exists in the repo and not on the instance. The script is
+      # bundled to dist/apply-rls.cjs by `npm run build:ops` for exactly this.
+      #
+      # It cannot be run from a laptop either: ipAllowList is empty, so the
+      # database takes no public connections. That is deliberate, and it is why
+      # the tool has to travel inside the image.
       #
       # Turns on Postgres row-level security, so tenant isolation is enforced by
       # the database rather than only by every query being written correctly.

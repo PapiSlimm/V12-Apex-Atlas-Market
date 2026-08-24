@@ -117,3 +117,35 @@ test('three Inspector General seats are filled, and only public halves are store
   const fingerprints = new Set(register.inspectors.map((i) => i.publicKey));
   assert.equal(fingerprints.size, register.inspectors.length, 'two seats sharing a key is one person holding two votes');
 });
+
+test('the RLS script ships in the runtime image, not just the repo', () => {
+  // The runtime stage copies dist, node_modules and package.json — no scripts/
+  // directory — and `npm prune --omit=dev` removes tsx. So `npm run rls:apply`,
+  // which is `tsx scripts/apply-rls.ts`, cannot run on the deployed instance.
+  //
+  // The database also refuses public connections (ipAllowList: []), so it
+  // cannot be applied from a laptop either. Without a bundled copy the one
+  // manual hardening step after deploy is simply impossible to perform, which
+  // is a fine way to end up with row-level security that never gets turned on.
+  const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+
+  assert.ok(pkg.scripts['build:ops'], 'no build:ops step — the ops script is never bundled');
+  assert.match(pkg.scripts['build:ops'], /scripts\/apply-rls\.ts/);
+  assert.match(pkg.scripts['build:ops'], /--outfile=dist\/apply-rls\.cjs/, 'must land in dist, which is what the image copies');
+  assert.match(
+    pkg.scripts.build,
+    /build:ops/,
+    'build:ops is not part of `npm run build`, so the image would be built without it',
+  );
+});
+
+test('the operator can reach the RLS step on a deployed instance', () => {
+  // Stated as a path assertion rather than a comment, because the failure is
+  // silent: everything builds, the app runs, and the hardening step just is not
+  // there when somebody goes looking for it.
+  const runtimeCopiesDist = /COPY[^\n]*\/app\/dist \.\/dist/.test(runtimeStage);
+  assert.ok(runtimeCopiesDist, 'dist is not copied into the runtime image');
+
+  const blueprint = read('render.yaml');
+  assert.match(blueprint, /rls:apply|apply-rls/, 'the blueprint does not tell the operator this step exists');
+});
