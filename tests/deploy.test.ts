@@ -27,21 +27,58 @@ const dockerfile = read('Dockerfile');
 const runtimeStage = dockerfile.slice(dockerfile.indexOf('AS runtime'));
 
 test('the runtime image carries the constitution the process refuses to start without', () => {
-  for (const file of ['constitution.yaml', 'constitution.lock', 'inspectorate.json']) {
-    assert.match(
-      runtimeStage,
-      new RegExp(`COPY[^\\n]*constitution/${file.replace('.', '\\.')}`),
-      `the runtime stage does not copy constitution/${file} — the image will fail closed on first boot`,
-    );
-  }
+  assert.match(
+    runtimeStage,
+    /COPY --from=build[^\n]*\/app\/constitution \.\/constitution/,
+    'the runtime stage does not copy the constitution directory — the image will fail closed on first boot',
+  );
+  assert.match(runtimeStage, /COPY --from=build --chown=root:root \/app\/constitution/, 'must be root-owned');
 });
 
-test('the constitution is read-only in the image', () => {
-  const copies = runtimeStage.split('\n').filter((l) => l.includes('constitution/'));
-  assert.ok(copies.length >= 3);
-  for (const line of copies) {
-    assert.match(line, /--chmod=444/, `${line.trim()} is writable — a process must not be able to re-anchor itself`);
-    assert.match(line, /--chown=root:root/, 'the unprivileged runtime user must not own its own constitution');
+test('the constitution directory is TRAVERSABLE and its files are read-only', () => {
+  // 555 on the directory, 444 on the files. The distinction is the whole bug:
+  // a directory at 444 has no execute bit, nothing can traverse it, and every
+  // file inside reports as ABSENT rather than refused — which is how the first
+  // deploy failed with the constitution sitting right there in the image.
+  assert.match(runtimeStage, /chmod 555 \/app\/constitution\b/, 'the directory must keep its execute bit');
+  assert.match(runtimeStage, /chmod 444 \/app\/constitution\/\*/, 'the files must not be writable');
+});
+
+test('no COPY --chmod creates a directory as a side effect', () => {
+  // The trap, stated as a rule. `COPY --chmod=444 src ./dir/file` makes BuildKit
+  // create ./dir and give the DIRECTORY that mode too. Modes on implicitly
+  // created directories belong in an explicit RUN where they can be read.
+  const offending = runtimeStage
+    .split('\n')
+    .filter((line) => line.startsWith('COPY') && line.includes('--chmod='))
+    .filter((line) => {
+      const destination = line.trim().split(/\s+/).pop() ?? '';
+      // A destination with a path separator beyond "./" implies a parent the
+      // COPY will create.
+      return destination.replace(/^\.\//, '').includes('/');
+    });
+
+  assert.deepEqual(
+    offending,
+    [],
+    'COPY --chmod with a nested destination applies the mode to the directory it creates as well',
+  );
+});
+
+test('the build proves the constitution is readable as the runtime user', () => {
+  // Everything else can be right and the image still ship a constitution the
+  // node user cannot read. This check runs AFTER `USER node`, so a build that
+  // cannot read its own constitution never becomes an image — the failure moves
+  // from a production crash-loop to a red build with the mode printed.
+  const afterUser = runtimeStage.slice(runtimeStage.indexOf('USER node'));
+  // Anchored to the start of a line. The first version matched /RUN node -e/
+  // anywhere, and passed happily when the instruction was commented out — the
+  // text was still there, the instruction was not.
+  assert.match(afterUser, /^RUN node -e/m, 'no post-USER readability assertion');
+  assert.match(afterUser, /constants\.R_OK/);
+  assert.match(afterUser, /UNREADABLE/, 'the assertion must say what went wrong, not just exit non-zero');
+  for (const file of ['constitution.yaml', 'constitution.lock', 'inspectorate.json']) {
+    assert.ok(afterUser.includes(file), `${file} is not covered by the readability assertion`);
   }
 });
 

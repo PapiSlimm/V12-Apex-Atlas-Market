@@ -13,6 +13,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import { execFileSync } from 'node:child_process';
 
 import { verifyAnchor, anchor, digestOf, ConstitutionAnchorError } from '../server/constitution/anchor';
 import { SanctionsEngine } from '../server/constitution/sanctions';
@@ -880,4 +881,108 @@ test('the anchor round-trips: re-anchoring produces the committed digest', () =>
   const { digest } = anchor();
   assert.equal(fs.readFileSync('constitution/constitution.lock', 'utf8'), before);
   assert.equal(digest, before.trim().split(/\s+/)[0]);
+});
+
+/* ------------------------------------------------------------------ *
+ * "Absent" and "unreadable" are different faults
+ *
+ * A constitution the process cannot READ is not the same fault as one that is
+ * not THERE, and conflating them cost a deploy: `COPY --chmod=444` gave
+ * /app/constitution mode 444, `existsSync` returned false for a file sitting
+ * right there, and the log said the constitution was missing. Whoever reads
+ * that goes looking for a lost COPY instead of a wrong mode.
+ * ------------------------------------------------------------------ */
+
+test('a constitution path that cannot be traversed reports unreadable, not absent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-unreadable-'));
+  const constitutionPath = path.join(dir, 'constitution');
+  // A plain file where a directory belongs: X_OK fails on it for every user,
+  // including root, which is the same branch a mode-444 directory takes.
+  fs.writeFileSync(constitutionPath, 'not a directory', { mode: 0o644 });
+
+  assert.throws(
+    () => verifyAnchor(constitutionPath),
+    (err: ConstitutionAnchorError) => {
+      assert.equal(err.reason, 'unreadable', 'reported as absent, which sends the reader hunting for a missing file');
+      assert.match(err.message, /cannot traverse/);
+      assert.match(err.message, /EXECUTE bit \(555, not 444\)/, 'the message must name the fix, not just the fault');
+      return true;
+    },
+  );
+});
+
+test('a genuinely missing constitution still reports absent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-absent-'));
+  assert.throws(
+    () => verifyAnchor(dir),
+    (err: ConstitutionAnchorError) => err.reason === 'absent',
+    'an empty but readable directory is a missing constitution, not an unreadable one',
+  );
+});
+
+test('a present constitution with a missing lock still reports lock_absent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-nolock-'));
+  fs.writeFileSync(path.join(dir, 'constitution.yaml'), 'instrument: V12-CONST-001\n');
+  assert.throws(
+    () => verifyAnchor(dir),
+    (err: ConstitutionAnchorError) => err.reason === 'lock_absent',
+    'the directory probe must not swallow the distinct lock fault',
+  );
+});
+
+test('a mode-444 directory is unreadable to an unprivileged process', { skip: process.getuid?.() === 0 ? false : 'needs root to drop privileges' }, () => {
+  // The faithful reproduction of the deploy failure. Root is exempt from the
+  // execute bit on directories, so this has to be observed as somebody else —
+  // which is precisely why the fault never showed up in local testing.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-modes-'));
+  const constitutionDir = path.join(dir, 'constitution');
+  fs.mkdirSync(constitutionDir);
+  fs.writeFileSync(path.join(constitutionDir, 'constitution.yaml'), 'x');
+  fs.chmodSync(constitutionDir, 0o755);
+  fs.chmodSync(dir, 0o755);
+
+  const probe = (mode: number): string => {
+    fs.chmodSync(constitutionDir, mode);
+    const script = `console.log(require('fs').existsSync(${JSON.stringify(path.join(constitutionDir, 'constitution.yaml'))}))`;
+    try {
+      return execFileSync('su', ['nobody', '-s', '/bin/sh', '-c', `node -e ${JSON.stringify(script)}`], {
+        encoding: 'utf8',
+      }).trim();
+    } finally {
+      fs.chmodSync(constitutionDir, 0o755);
+    }
+  };
+
+  assert.equal(probe(0o555), 'true', '555 is readable and traversable — what the image must use');
+  assert.equal(probe(0o444), 'false', 'and 444 makes the file look ABSENT rather than refused');
+});
+
+test('a present but unreadable constitution file reports unreadable, not absent', () => {
+  // Root bypasses permission bits, so a mode-000 file is still readable to the
+  // process running these tests and this branch is otherwise unreachable. The
+  // injected check is the only way to execute it — see assertReadable.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-noread-'));
+  fs.writeFileSync(path.join(dir, 'constitution.yaml'), 'instrument: V12-CONST-001\n');
+  fs.writeFileSync(path.join(dir, 'constitution.lock'), 'a'.repeat(64));
+
+  const refuseTheFile = (target: string): void => {
+    if (target.endsWith('constitution.yaml')) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+  };
+
+  assert.throws(
+    () => verifyAnchor(dir, refuseTheFile),
+    (err: ConstitutionAnchorError) => {
+      assert.equal(err.reason, 'unreadable');
+      assert.match(err.message, /exists but is not readable/);
+      assert.match(err.message, /uid/, 'the message must name the uid that could not read it');
+      return true;
+    },
+  );
+});
+
+test('the readable path is unaffected by the injected check', () => {
+  // The seam must not become a way to weaken the real thing: with the default
+  // accessor, a genuine constitution still verifies.
+  const result = verifyAnchor();
+  assert.equal(result.document.instrument, 'V12-CONST-001');
 });

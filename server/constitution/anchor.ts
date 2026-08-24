@@ -67,11 +67,72 @@ export interface AnchorResult {
 
 export class ConstitutionAnchorError extends Error {
   constructor(
-    readonly reason: 'absent' | 'unparseable' | 'digest_mismatch' | 'lock_absent' | 'entrenchment_violated',
+    readonly reason:
+      | 'absent'
+      | 'unreadable'
+      | 'unparseable'
+      | 'digest_mismatch'
+      | 'lock_absent'
+      | 'entrenchment_violated',
     message: string,
   ) {
     super(message);
     this.name = 'ConstitutionAnchorError';
+  }
+}
+
+/**
+ * Distinguish "not there" from "there and unreachable".
+ *
+ * Checks the containing directory first: without its execute bit, every stat
+ * inside it fails and every file in it looks absent.
+ */
+export type AccessCheck = (target: string, mode: number) => void;
+
+/**
+ * `access` is injectable ONLY so the unreadable-file branch can be tested.
+ *
+ * Running as root — which is how tests and many containers run — bypasses file
+ * permission bits entirely, so a file at mode 000 is still readable and the
+ * branch is unreachable. A seam a test can drive is better than a branch nobody
+ * has ever executed. It defaults to the real check and nothing in production
+ * passes anything else.
+ */
+function assertReadable(dir: string, file: string, label: string, access: AccessCheck = fs.accessSync): void {
+  let dirReadable = true;
+  try {
+    access(dir, fs.constants.X_OK | fs.constants.R_OK);
+  } catch {
+    dirReadable = false;
+  }
+
+  if (!dirReadable) {
+    throw new ConstitutionAnchorError(
+      'unreadable',
+      `${dir} exists but this process cannot traverse it, so ${label} cannot be read. ` +
+        'A directory needs its EXECUTE bit (555, not 444) for anything inside it to be reachable. ' +
+        'In a container this is usually `COPY --chmod=444` applied to a directory it created. ' +
+        'Article I §1.3: the service shall refuse to start.',
+    );
+  }
+
+  if (!fs.existsSync(file)) {
+    const reason = label === LOCK_FILE ? 'lock_absent' : 'absent';
+    const detail =
+      reason === 'lock_absent'
+        ? 'An unanchored Constitution is not a Constitution — re-anchor deliberately.'
+        : 'Article I §1.3: the service shall refuse to start.';
+    throw new ConstitutionAnchorError(reason, `${file} is absent. ${detail}`);
+  }
+
+  try {
+    access(file, fs.constants.R_OK);
+  } catch {
+    throw new ConstitutionAnchorError(
+      'unreadable',
+      `${file} exists but is not readable by this process (uid ${typeof process.getuid === 'function' ? process.getuid() : '?'}). ` +
+        'Article I §1.3: the service shall refuse to start.',
+    );
   }
 }
 
@@ -84,19 +145,28 @@ export function digestOf(bytes: Buffer | string): string {
  * Recompute and verify. Throws on any failure — callers must not catch this to
  * continue; the only correct response at boot is to stop.
  */
-export function verifyAnchor(dir: string = CONSTITUTION_DIR): AnchorResult {
+export function verifyAnchor(dir: string = CONSTITUTION_DIR, access?: AccessCheck): AnchorResult {
   const yamlPath = path.join(dir, YAML_FILE);
   const lockPath = path.join(dir, LOCK_FILE);
 
-  if (!fs.existsSync(yamlPath)) {
-    throw new ConstitutionAnchorError('absent', `${yamlPath} is absent. Article I §1.3: the service shall refuse to start.`);
-  }
-  if (!fs.existsSync(lockPath)) {
-    throw new ConstitutionAnchorError(
-      'lock_absent',
-      `${lockPath} is absent. An unanchored Constitution is not a Constitution — re-anchor deliberately.`,
-    );
-  }
+  /*
+   * "ABSENT" AND "UNREADABLE" ARE DIFFERENT FAULTS, AND SAYING SO SAVES HOURS.
+   *
+   * `existsSync` returns FALSE for a file that is present but sits in a
+   * directory this process cannot traverse — a directory without its execute
+   * bit. The file is right there and the message says it is missing, which
+   * sends whoever is reading the log looking for a lost COPY instead of a
+   * wrong mode.
+   *
+   * That is not hypothetical. It is exactly how this deployment first failed:
+   * `COPY --chmod=444` created /app/constitution with mode 444, the copy
+   * genuinely succeeded, and the process reported the constitution absent.
+   *
+   * So the directory is probed separately, and each fault gets its own reason
+   * and its own remedy.
+   */
+  assertReadable(dir, yamlPath, YAML_FILE, access);
+  assertReadable(dir, lockPath, LOCK_FILE, access);
 
   const bytes = fs.readFileSync(yamlPath);
   const actual = digestOf(bytes);
