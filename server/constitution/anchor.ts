@@ -107,11 +107,32 @@ function assertReadable(dir: string, file: string, label: string, access: Access
   }
 
   if (!dirReadable) {
+    /*
+     * Three distinct faults, three distinct messages. A single "cannot read the
+     * directory" would still leave whoever is reading the log guessing between
+     * a missing COPY, a wrong mode, and a path that is not a directory at all —
+     * which is the guessing this whole function exists to end.
+     */
+    if (!fs.existsSync(dir)) {
+      throw new ConstitutionAnchorError(
+        'absent',
+        `${dir} does not exist, so ${label} cannot be read. Nothing copied the constitution into this image ` +
+          'or onto this host. Article I §1.3: the service shall refuse to start.',
+      );
+    }
+    if (!fs.statSync(dir).isDirectory()) {
+      throw new ConstitutionAnchorError(
+        'unreadable',
+        `${dir} exists but is not a directory, so ${label} cannot be read. ` +
+          'Article I §1.3: the service shall refuse to start.',
+      );
+    }
     throw new ConstitutionAnchorError(
       'unreadable',
-      `${dir} exists but this process cannot traverse it, so ${label} cannot be read. ` +
-        'A directory needs its EXECUTE bit (555, not 444) for anything inside it to be reachable. ' +
-        'In a container this is usually `COPY --chmod=444` applied to a directory it created. ' +
+      `${dir} exists and is a directory, but this process cannot traverse it (mode ` +
+        `${(fs.statSync(dir).mode & 0o777).toString(8)}, uid ${typeof process.getuid === 'function' ? process.getuid() : '?'}), ` +
+        `so ${label} cannot be read. A directory needs its EXECUTE bit — 555, not 444 — for anything inside it to be ` +
+        'reachable. In a container this is usually `COPY --chmod=444` applied to a directory it created. ' +
         'Article I §1.3: the service shall refuse to start.',
     );
   }

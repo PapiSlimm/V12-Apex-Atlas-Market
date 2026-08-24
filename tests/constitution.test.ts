@@ -904,8 +904,7 @@ test('a constitution path that cannot be traversed reports unreadable, not absen
     () => verifyAnchor(constitutionPath),
     (err: ConstitutionAnchorError) => {
       assert.equal(err.reason, 'unreadable', 'reported as absent, which sends the reader hunting for a missing file');
-      assert.match(err.message, /cannot traverse/);
-      assert.match(err.message, /EXECUTE bit \(555, not 444\)/, 'the message must name the fix, not just the fault');
+      assert.match(err.message, /is not a directory/, 'a file where a directory belongs is its own distinct fault');
       return true;
     },
   );
@@ -917,6 +916,43 @@ test('a genuinely missing constitution still reports absent', () => {
     () => verifyAnchor(dir),
     (err: ConstitutionAnchorError) => err.reason === 'absent',
     'an empty but readable directory is a missing constitution, not an unreadable one',
+  );
+});
+
+test('a constitution directory that does not exist at all says exactly that', () => {
+  // Distinct from "the directory is there and I cannot get into it". Reading a
+  // log should not require guessing which of the two happened.
+  const missing = path.join(os.tmpdir(), `apex-nodir-${Date.now()}`, 'constitution');
+  assert.throws(
+    () => verifyAnchor(missing),
+    (err: ConstitutionAnchorError) => {
+      assert.equal(err.reason, 'absent');
+      assert.match(err.message, /does not exist/);
+      assert.match(err.message, /Nothing copied the constitution/, 'must point at the cause, not just the symptom');
+      return true;
+    },
+  );
+});
+
+test('an untraversable directory reports its actual mode and uid', () => {
+  // The message has to carry the evidence. "Cannot traverse" without the mode
+  // sends somebody to a shell on a container that will not stay up long enough
+  // to run ls.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-mode-'));
+  fs.writeFileSync(path.join(dir, 'constitution.yaml'), 'x');
+  fs.writeFileSync(path.join(dir, 'constitution.lock'), 'a'.repeat(64));
+  const refuseTheDirectory = (target: string): void => {
+    if (target === dir) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+  };
+
+  assert.throws(
+    () => verifyAnchor(dir, refuseTheDirectory),
+    (err: ConstitutionAnchorError) => {
+      assert.equal(err.reason, 'unreadable');
+      assert.match(err.message, /cannot traverse it \(mode [0-7]{3}, uid/);
+      assert.match(err.message, /EXECUTE bit — 555, not 444/);
+      return true;
+    },
   );
 });
 
