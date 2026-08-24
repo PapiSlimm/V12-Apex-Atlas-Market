@@ -14,8 +14,10 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { verifyAnchor, anchor, digestOf, ConstitutionAnchorError } from '../server/constitution/anchor';
+import { describeEnvironment } from '../server/constitution';
 import { SanctionsEngine } from '../server/constitution/sanctions';
 import { Inspectorate, determinationCanonical } from '../server/constitution/release';
 import { ConstitutionEngine, type EnginePosture, type ActionContext } from '../server/constitution/engine';
@@ -1021,4 +1023,72 @@ test('the readable path is unaffected by the injected check', () => {
   // accessor, a genuine constitution still verifies.
   const result = verifyAnchor();
   assert.equal(result.document.instrument, 'V12-CONST-001');
+});
+
+test('a failed boot reports the build commit and what is actually on disk', () => {
+  // Three deploys were spent guessing which image was running and what was in
+  // it. Both questions are answerable at the only moment anybody can see the
+  // answer: the log line of the boot that is refusing to start. The process
+  // exits immediately, so there is no shell to go and look with.
+  const report = describeEnvironment();
+
+  assert.match(report, /build commit:/, 'the log cannot answer "which image is this?"');
+  assert.match(report, /cwd:/);
+  assert.match(report, /constitution/, 'the constitution directory is the whole subject of the failure');
+  assert.match(report, /cwd contents:/, 'the log cannot answer "what was copied?"');
+  assert.match(report, /uid\/gid:/);
+});
+
+test('the diagnostic never throws, whatever it finds', () => {
+  // A diagnostic that crashes while reporting a crash replaces a useful message
+  // with a stack trace about the message. Run it somewhere with no constitution
+  // at all and somewhere that does not exist.
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-diag-'));
+  const original = process.cwd();
+  try {
+    process.chdir(empty);
+    const report = describeEnvironment();
+    assert.match(report, /DOES NOT EXIST/, 'a missing constitution directory must be named as such');
+    assert.doesNotThrow(() => describeEnvironment());
+  } finally {
+    process.chdir(original);
+  }
+
+  // The nastier case: the working directory is deleted out from under the
+  // process, so even process.cwd() throws ENOENT. A boot failing this way still
+  // has to produce a readable message rather than a stack trace about the
+  // message.
+  const doomed = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-doomed-'));
+  const before = process.cwd();
+  try {
+    process.chdir(doomed);
+    fs.rmSync(doomed, { recursive: true, force: true });
+    let report = '';
+    assert.doesNotThrow(() => {
+      report = describeEnvironment();
+    }, 'the diagnostic threw while diagnosing');
+    assert.match(report, /build commit:/, 'it must still report what it can');
+  } finally {
+    process.chdir(before);
+  }
+});
+
+test('a healthy boot prints no inventory', () => {
+  // Failure only. A healthy boot that dumps a filesystem listing is noise, and
+  // noise trains people to skip the logs — which is how the next real message
+  // gets missed.
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'server', 'constitution', 'index.ts'),
+    'utf8',
+  );
+  const boot = source.slice(source.indexOf('export function bootConstitution'));
+
+  // Counted, not sliced. A slice at the success line misses a call inserted
+  // just above it — which is exactly what a mutation did to the first version
+  // of this test. There are two fatal paths and therefore exactly two calls.
+  const calls = boot.match(/describeEnvironment\(\)/g) ?? [];
+  assert.equal(calls.length, 1, 'exactly one inventory is built, on the failure path only');
+
+  const catchBlock = boot.slice(boot.indexOf('} catch (err) {'), boot.indexOf('const { document, digest } = verified;'));
+  assert.match(catchBlock, /describeEnvironment\(\)/, 'the inventory must be built inside the failure handler');
 });

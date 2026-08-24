@@ -59,6 +59,56 @@ const defaultFatal = (message: string): never => {
 /**
  * Load, verify, assemble. Terminates the process on any constitutional failure.
  */
+/**
+ * What this process can actually see, for the log of a boot that is about to
+ * fail. Read-only, defensive, and it never throws — a diagnostic that crashes
+ * while reporting a crash is worse than none.
+ */
+export function describeEnvironment(): string {
+  const lines: string[] = ['', '--- what this process can see ---'];
+
+  const safely = (label: string, fn: () => string): void => {
+    try {
+      lines.push(`${label}: ${fn()}`);
+    } catch (err) {
+      lines.push(`${label}: <${(err as NodeJS.ErrnoException).code ?? 'error'}>`);
+    }
+  };
+
+  /*
+   * The build stamp. Render sets RENDER_GIT_COMMIT; other platforms set their
+   * own. Without it, "which image is this?" is unanswerable from the log, and
+   * that question has cost more time here than the actual bug.
+   */
+  const commit =
+    process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? process.env.SOURCE_COMMIT ?? '(not set)';
+  lines.push(`build commit: ${commit}`);
+  // Even process.cwd() throws — ENOENT — when the working directory has been
+  // removed underneath the process. Nothing in here is assumed to succeed.
+  safely('cwd', () => process.cwd());
+  safely('uid/gid', () => `${process.getuid?.() ?? '?'}/${process.getgid?.() ?? '?'}`);
+  safely('cwd contents', () => fs.readdirSync(process.cwd()).sort().join(' ') || '(empty)');
+
+  let dir: string;
+  try {
+    dir = path.resolve(process.cwd(), 'constitution');
+  } catch {
+    lines.push('constitution: <cwd unavailable>');
+    lines.push('---');
+    return lines.join('\n');
+  }
+
+  if (!fs.existsSync(dir)) {
+    lines.push(`${dir}: DOES NOT EXIST`);
+  } else {
+    safely(`${dir} mode`, () => (fs.statSync(dir).mode & 0o777).toString(8));
+    safely(`${dir} contents`, () => fs.readdirSync(dir).sort().join(' ') || '(empty)');
+  }
+
+  lines.push('---');
+  return lines.join('\n');
+}
+
 export function bootConstitution(options: BootOptions): BootedConstitution {
   const fatal = options.onFatal ?? defaultFatal;
 
@@ -66,10 +116,22 @@ export function bootConstitution(options: BootOptions): BootedConstitution {
   try {
     verified = verifyAnchor();
   } catch (err) {
+    /*
+     * A FAILURE THAT DIAGNOSES ITSELF.
+     *
+     * This process exits immediately, so nobody gets a shell on the container
+     * to look around — and in a hosted environment there may not BE a shell.
+     * Three deploys were spent guessing which image was running and what was
+     * actually on disk. Every one of those questions is answerable here, at the
+     * only moment anybody can see the answer.
+     *
+     * Printed on failure only. A healthy boot says nothing extra.
+     */
+    const inventory = describeEnvironment();
     if (err instanceof ConstitutionAnchorError) {
-      return fatal(`CONSTITUTION NOT LOADED (${err.reason})\n${err.message}`) as never;
+      return fatal(`CONSTITUTION NOT LOADED (${err.reason})\n${err.message}\n${inventory}`) as never;
     }
-    return fatal(`CONSTITUTION NOT LOADED\n${(err as Error).message}`) as never;
+    return fatal(`CONSTITUTION NOT LOADED\n${(err as Error).message}\n${inventory}`) as never;
   }
 
   const { document, digest } = verified;
